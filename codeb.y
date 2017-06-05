@@ -61,10 +61,10 @@
 
 @attributes { tree_node_t* node; } MinusList
 @attributes { symbol_t* symbols; } FuncDef
-@attributes { symbol_t* symbolsI; symbol_t* symbolsS; tree_node_t* node; } Expr Term PlusList MultList
+@attributes { symbol_t* symbolsI; symbol_t* symbolsS; tree_node_t* node; } Expr Term PlusList MultList LExpr
 @attributes { symbol_t* symbolsI; symbol_t* symbolsS; condition_t* cond; } CTermList Cond
 @attributes { symbol_t* symbolsI; symbol_t* symbolsS; tree_node_t* node; condition_t* cond; } CTerm
-@attributes { symbol_t* symbolsI; symbol_t* symbolsS; } Pars LabelList Stmts Stmt LabelDef LExpr ExprList
+@attributes { symbol_t* symbolsI; symbol_t* symbolsS; } Pars LabelList Stmts Stmt LabelDef ExprList
 
 @traversal @preorder codegen
 @traversal @postorder codegenpost
@@ -162,7 +162,7 @@ Stmt        : RETURN Expr
                 @i @Stmt.symbolsS@ = @LExpr.symbolsS@;
                 @i @LExpr.symbolsI@ = @Stmt.symbolsI@;
                 @i @Expr.symbolsI@ = @Stmt.symbolsI@;
-                @codegen invoke_burm()
+                @codegen invoke_burm(create_node(OP_ASSIGNMENT, NULL, @LExpr.node@, @Expr.node@, @Stmt.symbolsI@));
             @}
             | Term
             @{
@@ -229,12 +229,14 @@ CTerm       : '(' Cond ')'
 LExpr       : IDENTIFIER
             @{
               @i @LExpr.symbolsS@ = check_if_variable_non_existing(@IDENTIFIER.name@, @LExpr.symbolsI@);
+              @i @LExpr.node@ = create_id_node(@IDENTIFIER.name@, @LExpr.symbolsI@);
             @}
             | Term '[' Expr ']'
             @{
               @i @LExpr.symbolsS@ = @Expr.symbolsS@;
               @i @Expr.symbolsI@ = @LExpr.symbolsI@;
               @i @Term.symbolsI@ = @LExpr.symbolsI@;
+              @i @LExpr.node@ = create_node(OP_ARRAY_ACCESS, NULL, @Term.node@, @Expr.node@, @LExpr.symbolsI@);
             @}
             ;
 

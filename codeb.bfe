@@ -23,6 +23,9 @@ int load_symbol_into_reg(tree_node_t* node);
 stmt: OP_RET(directValue) # 1 # printf("movq $%d, %rax\nleave\nret\n\n", bnode->left->value);
 stmt: OP_RET(regValue) # 1 # printf("movq %s, %rax\nleave\nret\n\n", regs[bnode->left->value]);
 
+
+
+
 stmt: OP_GT(directValue, directValue) # 0 # print_comparison_gt_direct_direct(bnode);
 stmt: OP_GT(directValue, regValue) # 1 # print_comparison_gt_direct_reg(bnode);
 stmt: OP_GT(regValue, directValue) # 1 # print_comparison_gt_reg_direct(bnode);
@@ -36,15 +39,25 @@ stmt: OP_NEQ(regValue, regValue) # 2 # print_comparison_neq_reg_reg(bnode);
 stmt: OP_DEFINITION(directValue) # 1 # print_def_direct(bnode);
 stmt: OP_DEFINITION(regValue) # 1 # print_def_reg(bnode);
 
+stmt: OP_ASSIGNMENT(regAddr, directValue) # 1 # print_write_to_array_from_direct(bnode);
+stmt: OP_ASSIGNMENT(regAddr, regValue) # 1 # print_write_to_array_from_reg(bnode);
+stmt: OP_ASSIGNMENT(regValue, directValue) # 1 # print_write_to_var_from_direct(bnode);
+stmt: OP_ASSIGNMENT(regValue, regValue) # 1 # print_write_to_var_from_reg(bnode);
+
+
 directValue: num # 0
 directValue: OP_ADD(directValue, directValue) # 0 # bnode->value = bnode->left->value + bnode->right->value;
 directValue: OP_MULT(directValue, directValue) # 0 # bnode->value = bnode->left->value * bnode->right->value;
 directValue: OP_MINUS(directValue, directValue) # 0 # bnode->value = bnode->left->value * bnode->right->value;
 
 regValue: id # 0
+regAddr: id # 0
 
 regValue: OP_ARRAY_ACCESS(id, directValue) # 1 # bnode->value = print_load_array_direct_index(bnode->left, bnode->right);
 regValue: OP_ARRAY_ACCESS(id, regValue) # 1 # bnode->value = print_load_array_reg_index(bnode->left, bnode->right);
+
+regAddr: OP_ARRAY_ACCESS(id, directValue) # 1 # bnode->value = print_load_array_addr_direct_index(bnode->left, bnode->right);
+regAddr: OP_ARRAY_ACCESS(id, regValue) # 1 # bnode->value = print_load_array_addr_reg_index(bnode->left, bnode->right);
 
 regValue: OP_ADD(directValue, regValue) # 1 # bnode->value = print_add_direct_reg(bnode->right, bnode->left);
 regValue: OP_ADD(regValue, directValue) # 1 # bnode->value = print_add_direct_reg(bnode->left, bnode->right);
@@ -65,6 +78,34 @@ id: OP_ID # 0
 
 extern int yyparse(void);
 void burm_reduce(NODEPTR_TYPE bnode, int goalnt);
+
+void print_write_to_var_from_direct(tree_node_t* bnode) {
+
+}
+
+void print_write_to_var_from_reg(tree_node_t* bnode) {
+
+}
+
+void print_write_to_array_from_reg(tree_node_t* node) {
+	int destReg = (node->left->id != NULL ? -1 : node->left->value);
+	if (destReg == -1) {
+		printf("node does not save index of address register!\n");
+		exit(4);
+	}
+	int srcReg = (node->right->id != NULL ? load_symbol_into_reg(node->right) : node->right->value);
+	printf("movq %s, (%s)\t#write to array \n\n", regs[srcReg], regs[destReg]);
+}
+
+void print_write_to_array_from_direct(tree_node_t* node) {
+	int destReg = (node->left->id != NULL ? -1 : node->left->value);
+	if (destReg == -1) {
+		printf("node does not save index of address register!\n");
+		exit(4);
+	}
+
+	printf("movq $%d, (%s)\t#write to array \n\n", node->right->value, regs[destReg]);
+}
 
 void print_def_direct(tree_node_t* node) {
 	symbol_t* symbol = get_symbol_by_name(node->id, node->symbols);
@@ -159,6 +200,22 @@ void print_comparison_neq_reg_reg(tree_node_t* node) {
 	else
 		printf("je L_%s\n", node->condition->failTarget);
 	printf("\n");
+}
+
+int print_load_array_addr_direct_index(tree_node_t* idNode, tree_node_t* directNode) {
+	symbol_t* symbol = get_symbol_by_name(idNode->id, idNode->symbols);
+	int destReg = acquire_reg(idNode->symbols);
+	printf("movq %d(%rbp), %s\t#load array ptr for %s\n", symbol->frameOffset, regs[destReg], idNode->id);
+	printf("leaq (%s, %d, 8), %s\n\n", regs[destReg], directNode->value, regs[destReg]);
+	return destReg;
+}
+
+int print_load_array_addr_reg_index(tree_node_t* idNode, tree_node_t* regNode) {
+	symbol_t* symbol = get_symbol_by_name(idNode->id, idNode->symbols);
+	int srcReg = (regNode->id != NULL ? load_symbol_into_reg(regNode) : regNode->value);
+	int destReg = acquire_reg(idNode->symbols);
+	printf("leaq (%s, %s, 8), %s\n\n", regs[destReg], regs[srcReg], regs[destReg]);
+	return destReg;
 }
 
 int print_load_array_direct_index(tree_node_t* idNode, tree_node_t* directNode) {
