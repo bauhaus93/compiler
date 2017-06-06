@@ -1,13 +1,11 @@
 %{
 #include <stdio.h>
 #include "oxout.tab.h"
-#include "codeb.h"
+#include "error.h"
+#include "symbol.h"
+#include "tree.h"
 
-//extern int yylex();
-
-long GetNumber(const char *str, size_t len);
-void ExitError(const char *msg);
-void ExitErrorWithMatch(const char *msg);
+long get_number(const char *str, size_t len);
 
 %}
 
@@ -25,7 +23,7 @@ whitespace [ \t\n]
 
 %%
 
-<COMMENT><<EOF>> ExitError("In state COMMENT, but found EOF");
+<COMMENT><<EOF>> error_lexer("In state COMMENT, but found EOF", yylineno);
 
 <INITIAL>"(*" BEGIN COMMENT;
 <COMMENT>"*)" BEGIN INITIAL;
@@ -54,15 +52,15 @@ whitespace [ \t\n]
 <INITIAL>"*"        return MULT;
 
 <INITIAL>{letter}+{alnum}*  return IDENTIFIER; @{ @IDENTIFIER.name@ = strdup(yytext); @}
-<INITIAL>{digit}+ return NUMBER; @{ @NUMBER.value@ = GetNumber(yytext, yyleng); @}
+<INITIAL>{digit}+ return NUMBER; @{ @NUMBER.value@ = get_number(yytext, yyleng); @}
 
 <INITIAL>{whitespace}+ ;
 
-. ExitErrorWithMatch("Unexpected sequence found");
+. error_lexer_match("Unexpected sequence found", yylineno, yytext);
 
 %%
 
-long GetNumber(const char *str, size_t len) {
+long get_number(const char *str, size_t len) {
   char *stripped = (char*) malloc(len * sizeof(char));
   memset(stripped, 0, len * sizeof(char));
 
@@ -77,18 +75,3 @@ long GetNumber(const char *str, size_t len) {
   free(stripped);
   return result;
 }
-
-void ExitError(const char *msg) {
-  printf("[LexError] near line %d: %s\n", yylineno, msg);
-  exit(1);
-}
-
-void ExitErrorWithMatch(const char *msg) {
-  printf("[LexError] near line %d: %s @ : \"%s\"\n", yylineno, msg, yytext);
-  exit(1);
-}
-
-/*int main(int argc, char **argv) {
-  yylex();
-  return 0;
-}*/

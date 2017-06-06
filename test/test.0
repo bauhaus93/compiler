@@ -1,0 +1,30 @@
+f(n)
+  var r=1;
+  start:
+  if 1>n goto done;
+  r=r*n;
+  n=n+(-1);
+  goto start;
+  done: return r;
+end;
+
+gcd(a,b)
+start:
+if a>b goto l1;
+if b>a goto l2;
+return a;
+l1: a=a+(-b); goto start;
+l2: b=b+(-a); goto start;
+end;
+
+f2(x,y)
+if 0>x and y>2 goto l;
+return x+2;
+l: return 1+y;
+end;
+
+f3(x)
+if not 0>x goto l;
+return x+2;
+l: return x+1;
+end;
