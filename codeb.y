@@ -36,6 +36,7 @@
   int currReg = 0;
   int failLabelCounter = 0;
   condition_t* prevCondition = NULL;
+  const char* currFunction = NULL;
 
 %}
 
@@ -86,7 +87,7 @@ FuncDef     : IDENTIFIER '(' Pars ')' Stmts END
                 @i @FuncDef.symbols@ = error_if_non_existing_in_list(@Stmts.symbolsS@);
                 @i @Stmts.symbolsI@ = @Pars.symbolsS@;
                 @i @Pars.symbolsI@ = create_symbol_root();
-                @codegen write_function_header(@IDENTIFIER.name@, @Pars.symbolsS@, @FuncDef.symbols@);
+                @codegen write_function_header(@IDENTIFIER.name@, @Pars.symbolsS@, @FuncDef.symbols@); currFunction = @IDENTIFIER.name@;
               @}
             ;
 
@@ -130,7 +131,7 @@ LabelList   : @{
 LabelDef    : IDENTIFIER ':'
             @{
               @i @LabelDef.symbolsS@ = create_symbol(LABEL, @IDENTIFIER.name@, @LabelDef.symbolsI@);
-              @codegen clear_all_regs(@LabelDef.symbolsI@); printf("L_%s:\n", @IDENTIFIER.name@);
+              @codegen clear_all_regs(@LabelDef.symbolsI@); printf("L_%s_%s:\n", currFunction, @IDENTIFIER.name@);
             @}
             ;
 
@@ -143,7 +144,7 @@ Stmt        : RETURN Expr
             | GOTO IDENTIFIER
             @{
                 @i @Stmt.symbolsS@ = check_if_label_non_existing(@IDENTIFIER.name@, @Stmt.symbolsI@);
-                @codegen clear_all_regs(@Stmt.symbolsI@); print_condition_data(@Stmt.symbolsI@); printf("jmp L_%s\n", @IDENTIFIER.name@);
+                @codegen clear_all_regs(@Stmt.symbolsI@); print_condition_data(@Stmt.symbolsI@); printf("jmp L_%s_%s\n", currFunction, @IDENTIFIER.name@);
             @}
             | IF Cond GOTO IDENTIFIER
             @{
@@ -376,7 +377,7 @@ void error_symbol_non_existing(const char* symbolId) {
 void print_condition_data(symbol_t* symbols) {
   if (prevCondition != NULL) {
     clear_all_regs(symbols);
-    printf("jmp L_%s\nL_%s:\n", prevCondition->jumpTarget, prevCondition->failTarget);
+    printf("jmp L_%s_%s\nL_%s_%s:\n", currFunction, prevCondition->jumpTarget, currFunction, prevCondition->failTarget);
     free(prevCondition);
     prevCondition = NULL;
   }

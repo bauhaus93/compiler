@@ -151,10 +151,10 @@ void print_comparison_gt_direct_reg(tree_node_t* node) {
 	int reg = (node->right->id != NULL ? load_symbol_into_reg(node->right) : node->right->value);
 	printf("cmpq $%d, %s\t#cmp with %s\n", node->left->value, regs[reg], node->right->id != NULL ? node->right->id : "<intermediate>");
 	clear_all_regs(node->symbols);
-	if(node->condition->inversed)
-		printf("jg L_%s\n", node->condition->failTarget);
+	if(!node->condition->inversed)
+		printf("jg L_%s_%s\n", currFunction, node->condition->failTarget);
 	else
-		printf("jle L_%s\n", node->condition->failTarget);
+		printf("jle L_%s_%s\n", currFunction, node->condition->failTarget);
 	printf("\n");
 }
 
@@ -163,9 +163,9 @@ void print_comparison_gt_reg_direct(tree_node_t* node) {
 	printf("cmpq $%d, %s\t#cmp with %s\n", node->right->value, regs[reg], node->left->id != NULL ? node->left->id : "<intermediate>");
 	clear_all_regs(node->symbols);
 	if(node->condition->inversed)
-		printf("jl L_%s\n", node->condition->failTarget);
+		printf("jl L_%s_%s\n", currFunction, node->condition->failTarget);
 	else
-		printf("jle L_%s\n", node->condition->failTarget);
+		printf("jle L_%s_%s\n", currFunction, node->condition->failTarget);
 	printf("\n");
 }
 
@@ -176,16 +176,16 @@ void print_comparison_gt_reg_reg(tree_node_t* node) {
 	printf("cmpq %s, %s\t#cmp %s with %s\n", regs[regRight], regs[regLeft], node->left->id != NULL ? node->left->id : "<intermediate>", node->right->id != NULL ? node->right->id : "<intermediate>");
 	clear_all_regs(node->symbols);
 	if(node->condition->inversed)
-		printf("jg L_%s\n", node->condition->failTarget);
+		printf("jg L_%s_%s\n", currFunction, node->condition->failTarget);
 	else
-		printf("jle L_%s\n", node->condition->failTarget);
+		printf("jle L_%s_%s\n", currFunction, node->condition->failTarget);
 	printf("\n");
 }
 
 void print_comparison_neq_direct_direct(tree_node_t* node) {
 	if (node->left->value != node->right->value && node->condition->inversed) {
 		clear_all_regs(node->symbols);
-		printf("jmp L_%s\t#would-be conditional jmp -> always true\n", node->condition->failTarget);
+		printf("jmp L_%s_%s\t#would-be conditional jmp -> always true\n", currFunction, node->condition->failTarget);
 	}
 	else {
 		printf("#here would be a conditional jump that is always false\n");
@@ -198,9 +198,9 @@ void print_comparison_neq_direct_reg(tree_node_t* node) {
 	printf("cmpq $%d, %s\t#cmp with %s\n", node->left->value, regs[reg], node->right->id != NULL ? node->right->id : "<intermediate>");
 	clear_all_regs(node->symbols);
 	if(node->condition->inversed)
-		printf("jne L_%s\n", node->condition->failTarget);
+		printf("jne L_%s_%s\n", currFunction, node->condition->failTarget);
 	else
-		printf("je L_%s\n", node->condition->failTarget);
+		printf("je L_%s_%s\n", currFunction, node->condition->failTarget);
 	printf("\n");
 }
 
@@ -209,9 +209,9 @@ void print_comparison_neq_reg_direct(tree_node_t* node) {
 	printf("cmpq $%d, %s\t#cmp with %s\n", node->right->value, regs[reg], node->left->id != NULL ? node->left->id : "<intermediate>");
 	clear_all_regs(node->symbols);
 	if(node->condition->inversed)
-		printf("jne L_%s\n", node->condition->failTarget);
+		printf("jne L_%s_%s\n", currFunction, node->condition->failTarget);
 	else
-		printf("je L_%s\n", node->condition->failTarget);
+		printf("je L_%s_%s\n", currFunction, node->condition->failTarget);
 	printf("\n");
 }
 
@@ -222,9 +222,9 @@ void print_comparison_neq_reg_reg(tree_node_t* node) {
 	printf("cmpq %s, %s\t#cmp %s with %s\n", regs[regRight], regs[regLeft], node->left->id != NULL ? node->left->id : "<intermediate>", node->right->id != NULL ? node->right->id : "<intermediate>");
 	clear_all_regs(node->symbols);
 	if(node->condition->inversed)
-		printf("jne L_%s\n", node->condition->failTarget);
+		printf("jne L_%s_%s\n", currFunction, node->condition->failTarget);
 	else
-		printf("je L_%s\n", node->condition->failTarget);
+		printf("je L_%s_%s\n", currFunction, node->condition->failTarget);
 
 	printf("\n");
 }

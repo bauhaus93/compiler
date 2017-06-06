@@ -65,6 +65,7 @@ typedef struct TreeNode {
 extern const char* regs[];
 extern int failLabelCounter;
 extern int currReg;
+extern const char* currFunction;
 extern int assign_reg_to_symbol(const char* id, symbol_t* symbols);
 extern int get_symbol_reg(const char* id, symbol_t* symbols);
 extern symbol_t* get_symbol_by_name(const char* id, symbol_t* symbols);
