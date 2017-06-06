@@ -130,7 +130,7 @@ LabelList   : @{
 LabelDef    : IDENTIFIER ':'
             @{
               @i @LabelDef.symbolsS@ = create_symbol(LABEL, @IDENTIFIER.name@, @LabelDef.symbolsI@);
-              @codegen printf("L_%s:\n", @IDENTIFIER.name@);
+              @codegen clear_all_regs(@LabelDef.symbolsI@); printf("L_%s:\n", @IDENTIFIER.name@);
             @}
             ;
 
@@ -138,33 +138,33 @@ Stmt        : RETURN Expr
             @{
                 @i @Stmt.symbolsS@ = @Expr.symbolsS@;
                 @i @Expr.symbolsI@ = @Stmt.symbolsI@;
-                @codegen print_condition_data(); invoke_burm(create_node(OP_RET, NULL, @Expr.node@, NULL, @Stmt.symbolsI@));
+                @codegen print_condition_data(@Stmt.symbolsI@); invoke_burm(create_node(OP_RET, NULL, @Expr.node@, NULL, @Stmt.symbolsI@));
             @}
             | GOTO IDENTIFIER
             @{
                 @i @Stmt.symbolsS@ = check_if_label_non_existing(@IDENTIFIER.name@, @Stmt.symbolsI@);
-                @codegen print_condition_data(); printf("jmp L_%s\n", @IDENTIFIER.name@);
+                @codegen clear_all_regs(@Stmt.symbolsI@); print_condition_data(@Stmt.symbolsI@); printf("jmp L_%s\n", @IDENTIFIER.name@);
             @}
             | IF Cond GOTO IDENTIFIER
             @{
                 @i @Stmt.symbolsS@ = check_if_label_non_existing(@IDENTIFIER.name@, @Cond.symbolsS@);
                 @i @Cond.symbolsI@ = @Stmt.symbolsI@;
                 @i @Cond.cond@ = create_condition_data(@IDENTIFIER.name@, 0);
-                @codegen print_condition_data(); prevCondition = @Cond.cond@;
+                @codegen print_condition_data(@Stmt.symbolsI@); prevCondition = @Cond.cond@;
 
             @}
             | VAR IDENTIFIER EQUAL Expr
             @{
                 @i @Stmt.symbolsS@ = create_symbol(VARIABLE, @IDENTIFIER.name@, @Stmt.symbolsI@);
                 @i @Expr.symbolsI@ = @Stmt.symbolsI@;
-                @codegen print_condition_data(); invoke_burm(create_node(OP_DEFINITION, @IDENTIFIER.name@, @Expr.node@, NULL, @Stmt.symbolsS@));
+                @codegen print_condition_data(@Stmt.symbolsI@); invoke_burm(create_node(OP_DEFINITION, @IDENTIFIER.name@, @Expr.node@, NULL, @Stmt.symbolsS@));
             @}
             | LExpr EQUAL Expr
             @{
                 @i @Stmt.symbolsS@ = @LExpr.symbolsS@;
                 @i @LExpr.symbolsI@ = @Stmt.symbolsI@;
                 @i @Expr.symbolsI@ = @Stmt.symbolsI@;
-                @codegen print_condition_data(); invoke_burm(create_node(OP_ASSIGNMENT, NULL, @LExpr.node@, @Expr.node@, @Stmt.symbolsI@));
+                @codegen print_condition_data(@Stmt.symbolsI@); invoke_burm(create_node(OP_ASSIGNMENT, NULL, @LExpr.node@, @Expr.node@, @Stmt.symbolsI@));
             @}
             | Term
             @{
@@ -373,8 +373,9 @@ void error_symbol_non_existing(const char* symbolId) {
   exit(3);
 }
 
-void print_condition_data(void) {
+void print_condition_data(symbol_t* symbols) {
   if (prevCondition != NULL) {
+    clear_all_regs(symbols);
     printf("jmp L_%s\nL_%s:\n", prevCondition->jumpTarget, prevCondition->failTarget);
     free(prevCondition);
     prevCondition = NULL;
@@ -546,13 +547,24 @@ int acquire_reg(symbol_t* symbols) {
 }
 
 int clear_reg(int regId, symbol_t* symbols) {
+  int n = 0;
   for(symbol_t* ptr = symbols; ptr != NULL; ptr = ptr->next) {
     if(ptr->type == VARIABLE) {
+      n++;
       if (ptr->regId == regId) {
         printf("movq %s, %d(%rbp)\t#write %s back on stack, bc reg is needed\n", regs[regId], ptr->frameOffset, ptr->id);
         ptr->regId = -1;
         break;
       }
+    }
+  }
+}
+
+int clear_all_regs(symbol_t* symbols) {
+  for(symbol_t* ptr = symbols; ptr != NULL; ptr = ptr->next) {
+    if(ptr->type == VARIABLE && ptr->regId != -1) {
+      printf("movq %s, %d(%rbp)\t#write %s back on stack, bc jmp\n", regs[ptr->regId], ptr->frameOffset, ptr->id);
+      ptr->regId = -1;
     }
   }
 }
