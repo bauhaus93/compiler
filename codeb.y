@@ -185,6 +185,7 @@ Cond        : CTermList
                 @i @Cond.symbolsS@ = @CTerm.symbolsS@;
                 @i @CTerm.symbolsI@ = @Cond.symbolsI@;
                 @i @CTerm.cond@ = duplicate_condition_inverted(@Cond.cond@);
+                @codegen invoke_burm(@CTerm.node@);
             @}
             ;
 
@@ -381,6 +382,7 @@ void print_condition_data(symbol_t* symbols) {
     free(prevCondition);
     prevCondition = NULL;
   }
+  printf("#Statement\n");
 }
 
 int acquire_next_fail_label(void) {
@@ -475,6 +477,7 @@ condition_t* duplicate_condition_inverted(condition_t* data) {
   cond->jumpTarget = data->jumpTarget;
   cond->failTarget = data->failTarget;
   cond->inversed = !data->inversed;
+  printf("#INVERT!\n");
   return cond;
 }
 
