@@ -16,14 +16,12 @@ int load_symbol_into_reg(tree_node_t* node);
 %}
 
 %start stmt
-%term OP_STMT=1 OP_NUM=2 OP_ID=3 OP_ADD=4 OP_MULT=5 OP_MINUS=6 OP_RET=7 OP_ARRAY_ACCESS=8 OP_GT=9 OP_NEQ=10 OP_IF=11 OP_DEFINITION=12 OP_ASSIGNMENT=13
+%term OP_STMT=1 OP_NUM=2 OP_ID=3 OP_ADD=4 OP_MULT=5 OP_MINUS=6 OP_RET=7 OP_ARRAY_ACCESS=8 OP_GT=9 OP_NEQ=10 OP_IF=11 OP_DEFINITION=12 OP_ASSIGNMENT=13 OP_ADDR=14
 
 %%
 
-stmt: OP_RET(directValue) # 1 # printf("movq $%d, %rax\nleave\nret\n\n", bnode->left->value);
-stmt: OP_RET(regValue) # 1 # printf("movq %s, %rax\nleave\nret\n\n", regs[bnode->left->value]);
-
-
+stmt: OP_RET(directValue) # 1 # print_return_direct(bnode);
+stmt: OP_RET(regValue) # 1 # print_return_reg(bnode);
 
 
 stmt: OP_GT(directValue, directValue) # 0 # print_comparison_gt_direct_direct(bnode);
@@ -44,17 +42,15 @@ stmt: OP_ASSIGNMENT(regAddr, regValue) # 1 # print_write_to_array_from_reg(bnode
 stmt: OP_ASSIGNMENT(regValue, directValue) # 1 # print_write_to_var_from_direct(bnode);
 stmt: OP_ASSIGNMENT(regValue, regValue) # 1 # print_write_to_var_from_reg(bnode);
 
-
 directValue: num # 0
 directValue: OP_ADD(directValue, directValue) # 0 # bnode->value = bnode->left->value + bnode->right->value;
 directValue: OP_MULT(directValue, directValue) # 0 # bnode->value = bnode->left->value * bnode->right->value;
 directValue: OP_MINUS(directValue, directValue) # 0 # bnode->value = bnode->left->value * bnode->right->value;
 
 regValue: id # 0
-regAddr: id # 0
 
-regValue: OP_ARRAY_ACCESS(id, directValue) # 1 # bnode->value = print_load_array_direct_index(bnode->left, bnode->right);
-regValue: OP_ARRAY_ACCESS(id, regValue) # 1 # bnode->value = print_load_array_reg_index(bnode->left, bnode->right);
+regValue: OP_ARRAY_ACCESS(id, directValue) # 2 # bnode->value = print_load_array_direct_index(bnode->left, bnode->right);
+regValue: OP_ARRAY_ACCESS(id, regValue) # 2 # bnode->value = print_load_array_reg_index(bnode->left, bnode->right);
 
 regAddr: OP_ARRAY_ACCESS(id, directValue) # 1 # bnode->value = print_load_array_addr_direct_index(bnode->left, bnode->right);
 regAddr: OP_ARRAY_ACCESS(id, regValue) # 1 # bnode->value = print_load_array_addr_reg_index(bnode->left, bnode->right);
@@ -79,11 +75,33 @@ id: OP_ID # 0
 extern int yyparse(void);
 void burm_reduce(NODEPTR_TYPE bnode, int goalnt);
 
-void print_write_to_var_from_direct(tree_node_t* bnode) {
-
+void print_return_direct(tree_node_t* node) {
+	printf("movq $%d, %rax\nleave\nret\n\n", node->left->value);
 }
 
-void print_write_to_var_from_reg(tree_node_t* bnode) {
+void print_return_reg(tree_node_t* node) {
+	int reg = (node->left->id != NULL ? load_symbol_into_reg(node->left) : node->left->value);
+	printf("movq %s, %rax\t#return %s\nleave\nret\n\n", regs[reg], node->left->id == NULL ? "<intermediate>" : node->left->id);
+}
+
+void print_write_to_var_from_direct(tree_node_t* node) {
+	int reg = (node->left->id != NULL ? load_symbol_into_reg(node->left) : -1);
+	if (reg == -1) {
+		printf("node has no id but must have one!\n");
+		exit(4);
+	}
+	printf("movq $%d, %s\t#write to %s\n\n", node->right->value, regs[reg], node->left->id);
+}
+
+void print_write_to_var_from_reg(tree_node_t* node) {
+	int regDest = (node->left->id != NULL ? load_symbol_into_reg(node->left) : -1);
+	if (regDest == -1) {
+		printf("node has no id but must have one!\n");
+		exit(4);
+	}
+	int regSrc = (node->right->id != NULL ? load_symbol_into_reg(node->right) : node->right->value);
+
+	printf("movq %s, %s\t#write %s to %s\n\n", regs[regSrc], regs[regDest], node->right->id == NULL ? "<intermediate>" : node->right->id, node->left->id);
 
 }
 
@@ -109,29 +127,29 @@ void print_write_to_array_from_direct(tree_node_t* node) {
 
 void print_def_direct(tree_node_t* node) {
 	symbol_t* symbol = get_symbol_by_name(node->id, node->symbols);
-	printf("movq $%d, %d(%rbp)\t# definition of var %s\n\n", node->left->value, symbol->frameOffset, node->id);
+	printf("movq $%d, %d(%rbp)\t#definition of var %s\n\n", node->left->value, symbol->frameOffset, node->id);
 }
 
 void print_def_reg(tree_node_t* node) {
 	symbol_t* symbol = get_symbol_by_name(node->id, node->symbols);
 	int regExpr = (node->left->id != NULL ? load_symbol_into_reg(node->left) : node->left->value);
-	printf("movq %s, %d(%rbp)\t# definition of var %s\n\n", regs[regExpr], symbol->frameOffset, node->id);
+	printf("movq %s, %d(%rbp)\t#definition of var %s\n\n", regs[regExpr], symbol->frameOffset, node->id);
 }
 
 void print_comparison_gt_direct_direct(tree_node_t* node) {
 	if (node->left->value > node->right->value && node->condition->inversed) {
-		printf("jmp L_%s\t# would-be conditional jmp -> always true\n", node->condition->failTarget);
+		printf("jmp L_%s\t#would-be conditional jmp -> always true\n", node->condition->failTarget);
 	}
 	else {
-		printf("# here would be a conditional jump that is always false\n");
+		printf("#here would be a conditional jump that is always false\n");
 	}
 	printf("\n");
 }
 
 void print_comparison_gt_direct_reg(tree_node_t* node) {
 	int reg = (node->right->id != NULL ? load_symbol_into_reg(node->right) : node->right->value);
-	printf("cmp $%d, %s\t#cmp with %s\n", node->left->value, regs[reg], node->right->id != NULL ? node->right->id : "<intermediate>");
-	if(node->condition->inversed)
+	printf("cmpq $%d, %s\t#cmp with %s\n", node->left->value, regs[reg], node->right->id != NULL ? node->right->id : "<intermediate>");
+	if(!node->condition->inversed)
 		printf("jg L_%s\n", node->condition->failTarget);
 	else
 		printf("jle L_%s\n", node->condition->failTarget);
@@ -140,7 +158,7 @@ void print_comparison_gt_direct_reg(tree_node_t* node) {
 
 void print_comparison_gt_reg_direct(tree_node_t* node) {
 	int reg = (node->left->id != NULL ? load_symbol_into_reg(node->left) : node->left->value);
-	printf("cmp %s, $%d\t#cmp with %s\n", regs[reg], node->right->value, node->left->id != NULL ? node->left->id : "<intermediate>");
+	printf("cmpq $%d, %s\t#cmp with %s\n", node->right->value, regs[reg], node->left->id != NULL ? node->left->id : "<intermediate>");
 	if(node->condition->inversed)
 		printf("jg L_%s\n", node->condition->failTarget);
 	else
@@ -152,7 +170,7 @@ void print_comparison_gt_reg_reg(tree_node_t* node) {
 	int regLeft = (node->left->id != NULL ? load_symbol_into_reg(node->left) : node->left->value);
 	int regRight = (node->right->id != NULL ? load_symbol_into_reg(node->right) : node->right->value);
 
-	printf("cmp %s, %s\t#cmp %s with %s\n", regs[regLeft], regs[regRight], node->left->id != NULL ? node->left->id : "<intermediate>", node->right->id != NULL ? node->right->id : "<intermediate>");
+	printf("cmpq %s, %s\t#cmp %s with %s\n", regs[regRight], regs[regLeft], node->left->id != NULL ? node->left->id : "<intermediate>", node->right->id != NULL ? node->right->id : "<intermediate>");
 	if(node->condition->inversed)
 		printf("jg L_%s\n", node->condition->failTarget);
 	else
@@ -162,17 +180,17 @@ void print_comparison_gt_reg_reg(tree_node_t* node) {
 
 void print_comparison_neq_direct_direct(tree_node_t* node) {
 	if (node->left->value != node->right->value && node->condition->inversed) {
-		printf("jmp L_%s\t# would-be conditional jmp -> always true\n", node->condition->failTarget);
+		printf("jmp L_%s\t#would-be conditional jmp -> always true\n", node->condition->failTarget);
 	}
 	else {
-		printf("# here would be a conditional jump that is always false\n");
+		printf("#here would be a conditional jump that is always false\n");
 	}
 	printf("\n");
 }
 
 void print_comparison_neq_direct_reg(tree_node_t* node) {
 	int reg = (node->right->id != NULL ? load_symbol_into_reg(node->right) : node->right->value);
-	printf("cmp $%d, %s\t#cmp with %s\n", node->left->value, regs[reg], node->right->id != NULL ? node->right->id : "<intermediate>");
+	printf("cmpq $%d, %s\t#cmp with %s\n", node->left->value, regs[reg], node->right->id != NULL ? node->right->id : "<intermediate>");
 	if(node->condition->inversed)
 		printf("jne L_%s\n", node->condition->failTarget);
 	else
@@ -182,7 +200,7 @@ void print_comparison_neq_direct_reg(tree_node_t* node) {
 
 void print_comparison_neq_reg_direct(tree_node_t* node) {
 	int reg = (node->left->id != NULL ? load_symbol_into_reg(node->left) : node->left->value);
-	printf("cmp %s, $%d\t#cmp with %s\n", regs[reg], node->right->value, node->left->id != NULL ? node->left->id : "<intermediate>");
+	printf("cmpq $%d, %s\t#cmp with %s\n", node->right->value, regs[reg], node->left->id != NULL ? node->left->id : "<intermediate>");
 	if(node->condition->inversed)
 		printf("jne L_%s\n", node->condition->failTarget);
 	else
@@ -194,7 +212,7 @@ void print_comparison_neq_reg_reg(tree_node_t* node) {
 	int regLeft = (node->left->id != NULL ? load_symbol_into_reg(node->left) : node->left->value);
 	int regRight = (node->right->id != NULL ? load_symbol_into_reg(node->right) : node->right->value);
 
-	printf("cmp %s, %s\t#cmp %s with %s\n", regs[regLeft], regs[regRight], node->left->id != NULL ? node->left->id : "<intermediate>", node->right->id != NULL ? node->right->id : "<intermediate>");
+	printf("cmpq %s, %s\t#cmp %s with %s\n", regs[regRight], regs[regLeft], node->left->id != NULL ? node->left->id : "<intermediate>", node->right->id != NULL ? node->right->id : "<intermediate>");
 	if(node->condition->inversed)
 		printf("jne L_%s\n", node->condition->failTarget);
 	else
@@ -206,7 +224,7 @@ int print_load_array_addr_direct_index(tree_node_t* idNode, tree_node_t* directN
 	symbol_t* symbol = get_symbol_by_name(idNode->id, idNode->symbols);
 	int destReg = acquire_reg(idNode->symbols);
 	printf("movq %d(%rbp), %s\t#load array ptr for %s\n", symbol->frameOffset, regs[destReg], idNode->id);
-	printf("leaq (%s, %d, 8), %s\n\n", regs[destReg], directNode->value, regs[destReg]);
+	printf("leaq %d(%s), %s\n\n", directNode->value * 8, regs[destReg], regs[destReg]);
 	return destReg;
 }
 
@@ -214,25 +232,24 @@ int print_load_array_addr_reg_index(tree_node_t* idNode, tree_node_t* regNode) {
 	symbol_t* symbol = get_symbol_by_name(idNode->id, idNode->symbols);
 	int srcReg = (regNode->id != NULL ? load_symbol_into_reg(regNode) : regNode->value);
 	int destReg = acquire_reg(idNode->symbols);
+	printf("movq %d(%rbp), %s\t#load array ptr for %s\n", symbol->frameOffset, regs[destReg], idNode->id);
 	printf("leaq (%s, %s, 8), %s\n\n", regs[destReg], regs[srcReg], regs[destReg]);
 	return destReg;
 }
 
 int print_load_array_direct_index(tree_node_t* idNode, tree_node_t* directNode) {
 	symbol_t* symbol = get_symbol_by_name(idNode->id, idNode->symbols);
-	int destReg = acquire_reg(idNode->symbols);
-	printf("movq %d(%rbp), %s\t#load array ptr for %s\n", symbol->frameOffset, regs[destReg], idNode->id);
-	printf("movq (%s, %d, 8), %s\n\n", regs[destReg], directNode->value, regs[destReg]);
-	return destReg;
+	int reg = print_load_array_addr_direct_index(idNode, directNode);
+
+	printf("movq (%s), %s\t#dereference array addr\n", regs[reg], regs[reg]);
+	return reg;
 }
 
 int print_load_array_reg_index(tree_node_t* idNode, tree_node_t* regNode) {
 	symbol_t* symbol = get_symbol_by_name(idNode->id, idNode->symbols);
-	int srcReg = (regNode->id != NULL ? load_symbol_into_reg(regNode) : regNode->value);
-	int destReg = acquire_reg(idNode->symbols);
-	printf("movq %d(%rbp), %s\t#load array ptr for %s\n", symbol->frameOffset, regs[destReg], idNode->id);
-	printf("movq (%s, %s, 8), %s\n\n", regs[destReg], regs[srcReg], regs[destReg]);
-	return destReg;
+	int reg = print_load_array_addr_reg_index(idNode, regNode);
+	printf("movq (%s), %s\t#derefence array addr\n", regs[reg], regs[reg]);
+	return reg;
 }
 
 int print_add_direct_reg(tree_node_t* regNode, tree_node_t* directNode) {

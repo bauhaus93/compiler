@@ -35,6 +35,7 @@
   const char* regs[]= {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9", "%r10", "%r11"};
   int currReg = 0;
   int failLabelCounter = 0;
+  condition_t* prevCondition = NULL;
 
 %}
 
@@ -137,32 +138,33 @@ Stmt        : RETURN Expr
             @{
                 @i @Stmt.symbolsS@ = @Expr.symbolsS@;
                 @i @Expr.symbolsI@ = @Stmt.symbolsI@;
-                @codegen invoke_burm(create_node(OP_RET, NULL, @Expr.node@, NULL, @Stmt.symbolsI@));
+                @codegen print_condition_data(); invoke_burm(create_node(OP_RET, NULL, @Expr.node@, NULL, @Stmt.symbolsI@));
             @}
             | GOTO IDENTIFIER
             @{
                 @i @Stmt.symbolsS@ = check_if_label_non_existing(@IDENTIFIER.name@, @Stmt.symbolsI@);
-                @codegen printf("jmp L_%s\n", @IDENTIFIER.name@);
+                @codegen print_condition_data(); printf("jmp L_%s\n", @IDENTIFIER.name@);
             @}
             | IF Cond GOTO IDENTIFIER
             @{
                 @i @Stmt.symbolsS@ = check_if_label_non_existing(@IDENTIFIER.name@, @Cond.symbolsS@);
                 @i @Cond.symbolsI@ = @Stmt.symbolsI@;
                 @i @Cond.cond@ = create_condition_data(@IDENTIFIER.name@, 0);
-                @codegenpost printf("jmp L_%s\nL_%s:\n", @IDENTIFIER.name@, @Cond.cond@->failTarget);
+                @codegen print_condition_data(); prevCondition = @Cond.cond@;
+
             @}
             | VAR IDENTIFIER EQUAL Expr
             @{
                 @i @Stmt.symbolsS@ = create_symbol(VARIABLE, @IDENTIFIER.name@, @Stmt.symbolsI@);
                 @i @Expr.symbolsI@ = @Stmt.symbolsI@;
-                @codegen invoke_burm(create_node(OP_DEFINITION, @IDENTIFIER.name@, @Expr.node@, NULL, @Stmt.symbolsS@));
+                @codegen print_condition_data(); invoke_burm(create_node(OP_DEFINITION, @IDENTIFIER.name@, @Expr.node@, NULL, @Stmt.symbolsS@));
             @}
             | LExpr EQUAL Expr
             @{
                 @i @Stmt.symbolsS@ = @LExpr.symbolsS@;
                 @i @LExpr.symbolsI@ = @Stmt.symbolsI@;
                 @i @Expr.symbolsI@ = @Stmt.symbolsI@;
-                @codegen invoke_burm(create_node(OP_ASSIGNMENT, NULL, @LExpr.node@, @Expr.node@, @Stmt.symbolsI@));
+                @codegen print_condition_data(); invoke_burm(create_node(OP_ASSIGNMENT, NULL, @LExpr.node@, @Expr.node@, @Stmt.symbolsI@));
             @}
             | Term
             @{
@@ -185,21 +187,21 @@ Cond        : CTermList
             @}
             ;
 
-CTermList   : CTermList AND CTerm
+CTermList   : CTerm AND CTermList
             @{
                 @i @CTermList.0.symbolsS@ = @CTermList.1.symbolsS@;
                 @i @CTerm.symbolsI@ = @CTermList.0.symbolsI@;
                 @i @CTermList.1.symbolsI@ = @CTerm.symbolsS@;
                 @i @CTermList.1.cond@ = @CTermList.0.cond@;
                 @i @CTerm.cond@ = @CTermList.0.cond@;
-                @codegenpost invoke_burm(@CTerm.node@);
+                @codegen invoke_burm(@CTerm.node@);
             @}
             | CTerm
             @{
                 @i @CTermList.symbolsS@ = @CTerm.symbolsS@;
                 @i @CTerm.symbolsI@ = @CTermList.symbolsI@;
                 @i @CTerm.cond@ = @CTermList.cond@;
-                @codegenpost invoke_burm(@CTerm.node@);
+                @codegen invoke_burm(@CTerm.node@);
             @}
             ;
 
@@ -371,6 +373,14 @@ void error_symbol_non_existing(const char* symbolId) {
   exit(3);
 }
 
+void print_condition_data(void) {
+  if (prevCondition != NULL) {
+    printf("jmp L_%s\nL_%s:\n", prevCondition->jumpTarget, prevCondition->failTarget);
+    free(prevCondition);
+    prevCondition = NULL;
+  }
+}
+
 int acquire_next_fail_label(void) {
   return failLabelCounter++;
 }
@@ -538,8 +548,11 @@ int acquire_reg(symbol_t* symbols) {
 int clear_reg(int regId, symbol_t* symbols) {
   for(symbol_t* ptr = symbols; ptr != NULL; ptr = ptr->next) {
     if(ptr->type == VARIABLE) {
-      if (ptr->regId == regId)
+      if (ptr->regId == regId) {
+        printf("movq %s, %d(%rbp)\t#write %s back on stack, bc reg is needed\n", regs[regId], ptr->frameOffset, ptr->id);
         ptr->regId = -1;
+        break;
+      }
     }
   }
 }
