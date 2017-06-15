@@ -1,4 +1,4 @@
-NAME = codeb
+NAME = gesamt
 CFLAGS = --std=gnu99 -Wall
 CFLAGSTOOLS = --std=gnu99
 
